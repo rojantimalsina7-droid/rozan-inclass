@@ -489,16 +489,57 @@
     }
 
     .item-card.is-flagged {
-      border-left: 5px solid var(--danger-badge);
-      background: linear-gradient(90deg, var(--danger-bg) 0%, #ffffff 15%);
+      border: 2px solid #e02424;
+      border-left: 8px solid #c81e1e;
+      background: #fef2f2;
+      box-shadow: 0 4px 14px rgba(224, 36, 36, 0.16);
+    }
+
+    .item-card.is-flagged .item-name {
+      color: #9b1c1c;
+      font-weight: 800;
+    }
+
+    .item-card.is-flagged .stock-value {
+      color: #c81e1e;
+      font-weight: 900;
+    }
+
+    .item-card.is-flagged .item-stock-stepper {
+      border-color: #fca5a5;
+      background: #ffffff;
+    }
+
+    .item-card.is-flagged .step-btn {
+      border-color: #fca5a5;
+      color: #9b1c1c;
+    }
+
+    .item-card.is-flagged .step-btn:hover {
+      background: #fee2e2;
     }
 
     .item-card.is-low {
-      border-left: 5px solid var(--warning-badge);
+      border-left: 6px solid var(--warning-badge);
+      background: linear-gradient(90deg, var(--warning-bg) 0%, #ffffff 15%);
     }
 
     .item-card.is-good {
       border-left: 5px solid var(--success-badge);
+    }
+
+    .sort-badge {
+      font-size: 0.76rem;
+      color: var(--danger-text);
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-border);
+      padding: 3px 10px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 4px;
+      font-weight: 700;
     }
 
     .item-main-row {
@@ -540,9 +581,12 @@
     }
 
     .badge-reorder {
-      background: var(--danger-bg);
-      border: 1px solid var(--danger-border);
-      color: var(--danger-text);
+      background: #e02424;
+      border: 1px solid #c81e1e;
+      color: #ffffff;
+      font-weight: 800;
+      padding: 3px 9px;
+      box-shadow: 0 1px 3px rgba(224, 36, 36, 0.3);
     }
 
     .badge-low {
@@ -957,7 +1001,12 @@
 
     <!-- Full Stock Management List -->
     <div class="inventory-section-header">
-      <h3 class="inventory-section-title">Stock Check & Par Levels</h3>
+      <div>
+        <h3 class="inventory-section-title">Stock Check & Par Levels</h3>
+        <div class="sort-badge">
+          <span>⚡ Sorted by Urgency:</span> <strong>🚨 Reorder Now &rarr; ⚠️ Low Stock &rarr; ✅ Stocked</strong>
+        </div>
+      </div>
       <span class="inventory-counter" id="inventoryCounter">Showing 0 ingredients</span>
     </div>
 
@@ -1123,6 +1172,8 @@
       const copyBtn = document.getElementById('copyOrderBtn');
 
       const flaggedItems = inventory.filter(item => getStatus(item.current, item.par) === 'reorder');
+      // Sort urgent items by depletion ratio (most depleted first)
+      flaggedItems.sort((a, b) => (a.current / (a.par || 1)) - (b.current / (b.par || 1)));
 
       badge.textContent = `${flaggedItems.length} ${flaggedItems.length === 1 ? 'item' : 'items'}`;
 
@@ -1211,6 +1262,30 @@
         return item.category === currentFilter;
       });
 
+      // Automatically sort inventory items by urgency:
+      // 1. "Reorder Now" items first
+      // 2. Followed by "Low Stock"
+      // 3. Followed by "Stocked"
+      filtered.sort((a, b) => {
+        const rankMap = { 'reorder': 1, 'low': 2, 'good': 3 };
+        const rankA = rankMap[getStatus(a.current, a.par)];
+        const rankB = rankMap[getStatus(b.current, b.par)];
+
+        if (rankA !== rankB) {
+          return rankA - rankB; // Reorder Now (1) -> Low Stock (2) -> Stocked (3)
+        }
+
+        // Within same urgency level: sort by depletion ratio (most critical first)
+        const ratioA = a.current / (a.par || 1);
+        const ratioB = b.current / (b.par || 1);
+        if (ratioA !== ratioB) {
+          return ratioA - ratioB;
+        }
+
+        // Secondary tie-breaker: Alphabetical name
+        return a.name.localeCompare(b.name);
+      });
+
       counterEl.textContent = `Showing ${filtered.length} of ${inventory.length} ingredients`;
 
       if (filtered.length === 0) {
@@ -1230,7 +1305,7 @@
 
         if (status === 'reorder') {
           cardClass += ' is-flagged';
-          statusBadge = '<span class="badge badge-reorder">🚨 Reorder Now</span>';
+          statusBadge = '<span class="badge badge-reorder">🚨 Reorder Now (Urgent)</span>';
         } else if (status === 'low') {
           cardClass += ' is-low';
           statusBadge = '<span class="badge badge-low">⚠️ Low Stock</span>';
@@ -1238,6 +1313,10 @@
           cardClass += ' is-good';
           statusBadge = '<span class="badge badge-good">✅ Stocked</span>';
         }
+
+        const deficitHtml = status === 'reorder' 
+          ? `<span style="color: #c81e1e; font-weight: 700;">Deficit: -${Math.max(1, item.par - item.current)} ${escapeHtml(item.unit)}</span>` 
+          : '';
 
         return `
           <div class="${cardClass}">
@@ -1250,6 +1329,7 @@
                 <div class="item-meta">
                   <span><strong>${escapeHtml(item.category)}</strong></span>
                   <span>Min Par: ${item.par} ${escapeHtml(item.unit)}</span>
+                  ${deficitHtml}
                 </div>
               </div>
 
